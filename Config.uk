@@ -1,0 +1,10 @@
+menuconfig LIBPING
+	bool "ping Unikraft library"
+	default n
+
+if LIBPING
+config LIBPING_MAIN_FUNCTION
+	bool "Provide main function"
+	default n
+
+endif

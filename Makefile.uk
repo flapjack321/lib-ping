@@ -1,0 +1,85 @@
+# SPDX-License-Identifier: BSD-3-Clause
+#
+# ping Unikraft library
+#
+# Authors: Ethan Cotterell <e.cotterell@lancaster.ac.uk>
+#
+# Copyright (c) 2021, Lancaster University. All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions
+# are met:
+#
+# 1. Redistributions of source code must retain the above copyright
+#    notice, this list of conditions and the following disclaimer.
+# 2. Redistributions in binary form must reproduce the above copyright
+#    notice, this list of conditions and the following disclaimer in the
+#    documentation and/or other materials provided with the distribution.
+# 3. Neither the name of the copyright holder nor the names of its
+#    contributors may be used to endorse or promote products derived from
+#    this software without specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+# ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+# LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+# CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+# SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+# INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+# CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+# ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+# POSSIBILITY OF SUCH DAMAGE.
+
+################################################################################
+# Library registration
+################################################################################
+$(eval $(call addlib_s,libping,$(CONFIG_LIBPING)))
+
+################################################################################
+# Sources
+################################################################################]
+LIBPING_VERSION = 2.1.2
+LIBPING_ZIPNAME = STABLE-2_1_2_RELEASE
+# LIBPING_URL = https://github.com/lwip-tcpip/lwip/archive/refs/tags/$(LIBLWIP_ZIPNAME).zip
+LIBPING_URL = https://github.com/lwip-tcpip/lwip/archive/refs/heads/master.zip
+# LIBPING_SUBDIR = lwip-$(LIBPING_ZIPNAME)
+LIBPING_SUBDIR = lwip-master
+LIBPING_PATCHDIR = $(LIBPING_BASE)/patches
+$(eval $(call patch,libping,$(LIBPING_PATCHDIR),$(LIBPING_SUBDIR)))
+$(eval $(call fetch,libping,$(LIBPING_URL)))
+
+################################################################################
+# Helpers
+################################################################################
+LIBPING_SRC = $(LIBPING_ORIGIN)/$(LIBPING_SUBDIR)/src
+
+################################################################################
+# Library includes
+################################################################################
+CINCLUDES-y += -I$(LIBPING_BASE)/include
+
+################################################################################
+# Flags
+################################################################################
+LIBPING_FLAGS =
+
+# Suppress some warnings to make the build process look neater
+LIBPING_FLAGS_SUPPRESS =
+
+LIBPING_CFLAGS-y += $(LIBPING_FLAGS)
+LIBPING_CFLAGS-y += $(LIBPING_FLAGS_SUPPRESS)
+
+################################################################################
+# Glue code
+################################################################################
+# Include paths
+# LIBPING_CINCLUDES-y   += $(LIBPING_COMMON_INCLUDES-y)
+# LIBPING_CXXINCLUDES-y += $(LIBPING_COMMON_INCLUDES-y)
+LIBPINGSRCS-$(CONFIG_LIBPING_MAIN_FUNCTION) += $(LIBPING_BASE)/main.c|unikraft
+
+################################################################################
+# Library sources
+################################################################################
+# LIBPING_SRCS-y += # Include source files here
+LIBPING_SRCS-y += $(LIBPING_SRC)/contrib/apps/ping/ping.c
