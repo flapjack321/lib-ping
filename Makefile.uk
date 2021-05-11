@@ -39,20 +39,17 @@ $(eval $(call addlib_s,libping,$(CONFIG_LIBPING)))
 ################################################################################
 # Sources
 ################################################################################]
-LIBPING_VERSION = 2.1.2
-LIBPING_ZIPNAME = STABLE-2_1_2_RELEASE
-# LIBPING_URL = https://github.com/lwip-tcpip/lwip/archive/refs/tags/$(LIBLWIP_ZIPNAME).zip
-LIBPING_URL = https://github.com/lwip-tcpip/lwip/archive/refs/heads/master.zip
-# LIBPING_SUBDIR = lwip-$(LIBPING_ZIPNAME)
-LIBPING_SUBDIR = lwip-master
-LIBPING_PATCHDIR = $(LIBPING_BASE)/patches
-$(eval $(call patch,libping,$(LIBPING_PATCHDIR),$(LIBPING_SUBDIR)))
-$(eval $(call fetch,libping,$(LIBPING_URL)))
+#LIBPING_VERSION = release/13.0.0
+# LIBPING_URL = https://github.com/freebsd/freebsd-src/archive/refs/tags/$(LIBPING_VERSION).zip
+# LIBPING_SUBDIR = freebsd-src-release-13.0.0
+#LIBPING_PATCHDIR = $(LIBPING_BASE)/patches
+#$(eval $(call patch,libping,$(LIBPING_PATCHDIR),$(LIBPING_SUBDIR)))
+#$(eval $(call fetch,libping,$(LIBPING_URL)))
 
 ################################################################################
 # Helpers
 ################################################################################
-LIBPING_SRC = $(LIBPING_ORIGIN)/$(LIBPING_SUBDIR)/src
+LIBPING_SRC = $(LIBPING_ORIGIN)/$(LIBPING_SUBDIR)
 
 ################################################################################
 # Library includes
@@ -65,7 +62,7 @@ CINCLUDES-y += -I$(LIBPING_BASE)/include
 LIBPING_FLAGS =
 
 # Suppress some warnings to make the build process look neater
-LIBPING_FLAGS_SUPPRESS =
+LIBPING_FLAGS_SUPPRESS = -Wunused-function
 
 LIBPING_CFLAGS-y += $(LIBPING_FLAGS)
 LIBPING_CFLAGS-y += $(LIBPING_FLAGS_SUPPRESS)
@@ -82,4 +79,8 @@ LIBPINGSRCS-$(CONFIG_LIBPING_MAIN_FUNCTION) += $(LIBPING_BASE)/main.c|unikraft
 # Library sources
 ################################################################################
 # LIBPING_SRCS-y += # Include source files here
-LIBPING_SRCS-y += $(LIBPING_SRC)/contrib/apps/ping/ping.c
+LIBPING_SRCS-y += $(LIBPING_BASE)/strtonum.c
+LIBPING_SRCS-y += $(LIBPING_BASE)/utils.c
+LIBPING_SRCS-y += $(LIBPING_BASE)/ping.c
+# LIBPING_SRCS-y += $(LIBPING_BASE)/main.c
+
