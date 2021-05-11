@@ -105,6 +105,7 @@ static char sccsid[] = "@(#)ping.c	8.1 (Berkeley) 6/5/93";
 #include "utils.h"
 #include "strtonum.h"
 #include "config.h"
+#include "usage.h"
 
 #define	INADDR_LEN	((int)sizeof(in_addr_t))
 #define	TIMEVAL_LEN	((int)sizeof(struct tv32))
@@ -214,10 +215,7 @@ static double tsumsq = 0.0;	/* sum of all times squared, for std. dev. */
 static volatile sig_atomic_t finish_up;
 static volatile sig_atomic_t siginfo_p;
 
-static cap_channel_t *capdns;
-
 static void fill(char *, char *);
-static cap_channel_t *capdns_setup(void);
 static void check_status(void);
 static void finish(void) __dead2;
 static void pinger(void);
@@ -264,7 +262,6 @@ ping(int argc, char *const *argv)
 #ifdef IPSEC_POLICY_IPSEC
 	policy_in = policy_out = NULL;
 #endif
-	cap_rights_t rights;
 
 	options |= F_NUMERIC;
 
@@ -337,10 +334,10 @@ ping(int argc, char *const *argv)
 			break;
 		case 'c':
 			ltmp = strtonum(optarg, 1, LONG_MAX, &errstr);
-			if (errstr != NULL)
-				errx(EX_USAGE,
-				    "invalid count of packets to transmit: `%s'",
-				    optarg);
+			if (errstr != NULL) {
+				fprintf(stderr, "invalid count of packets to transmit: '%s'\n", optarg);
+				exit(64);
+			}
 			npackets = (long)ltmp;
 			break;
 		case 'D':
@@ -609,14 +606,14 @@ ping(int argc, char *const *argv)
 	if (options & F_PINGFILLED) {
 		fill((char *)datap, payload);
 	}
-	capdns = capdns_setup();
 	if (source) {
 		bzero((char *)&sock_in, sizeof(sock_in));
 		sock_in.sin_family = AF_INET;
 		if (inet_aton(source, &sock_in.sin_addr) != 0) {
 			shostname = source;
 		} else {
-			hp = cap_gethostbyname2(capdns, source, AF_INET);
+			hp = gethostbyname(source);
+			// hp = cap_gethostbyname2(capdns, source, AF_INET);
 			if (!hp) {
 				fprintf(stderr, "cannot resolve %s: %s\n", source, hstrerror(h_errno));
 				exit(68);
@@ -624,8 +621,10 @@ ping(int argc, char *const *argv)
 
 			sock_in.sin_len = sizeof sock_in;
 			if ((unsigned)hp->h_length > sizeof(sock_in.sin_addr) ||
-			    hp->h_length < 0)
-				errx(1, "gethostbyname2: illegal address");
+			    hp->h_length < 0) {
+						fprintf(stderr, "gethostbyname: illegal address: '%s'\n", source);
+						exit(1);
+					}
 			memcpy(&sock_in.sin_addr, hp->h_addr_list[0],
 			    sizeof(sock_in.sin_addr));
 			(void)strncpy(snamebuf, hp->h_name,
@@ -646,7 +645,8 @@ ping(int argc, char *const *argv)
 	if (inet_aton(target, &to->sin_addr) != 0) {
 		hostname = target;
 	} else {
-		hp = cap_gethostbyname2(capdns, target, AF_INET);
+		// hp = cap_gethostbyname2(capdns, target, AF_INET);
+		hp = gethostbyname(target);
 		if (!hp) {
 			fprintf(stderr, "cannot resolve %s: %s", target, hstrerror(h_errno));
 			exit(68);
@@ -780,7 +780,7 @@ ping(int argc, char *const *argv)
 	 * namespaces (e.g filesystem) is restricted (see capsicum(4)).
 	 * We must connect(2) our socket before this point.
 	 */
-	caph_cache_catpages();
+/*	caph_cache_catpages();
 	if (caph_enter_casper() < 0) {
 		fprintf(stderr, "caph_enter_casper\n");
 		exit(1);
@@ -795,7 +795,7 @@ ping(int argc, char *const *argv)
 	if (caph_rights_limit(ssend, &rights) < 0) {
 		fprintf(stderr, "cap_rights_limit ssend\n");
 		exit(1);
-	}
+	} */
 
 	/* record route option */
 	if (options & F_RROUTE) {
@@ -904,21 +904,21 @@ ping(int argc, char *const *argv)
 	hold = IP_MAXPACKET + 128;
 	(void)setsockopt(srecv, SOL_SOCKET, SO_RCVBUF, (char *)&hold,
 	    sizeof(hold));
-	/* CAP_SETSOCKOPT removed */
-	cap_rights_init(&rights, CAP_RECV, CAP_EVENT);
-	if (caph_rights_limit(srecv, &rights) < 0) {
-		fprintf(stderr, "cap_rights_limit srecv setsockopt\n");
-		exit(1);
-	}
+	// /* CAP_SETSOCKOPT removed */
+	// cap_rights_init(&rights, CAP_RECV, CAP_EVENT);
+	// if (caph_rights_limit(srecv, &rights) < 0) {
+	// 	fprintf(stderr, "cap_rights_limit srecv setsockopt\n");
+	// 	exit(1);
+	// }
 	if (uid == 0)
 		(void)setsockopt(ssend, SOL_SOCKET, SO_SNDBUF, (char *)&hold,
 		    sizeof(hold));
 	/* CAP_SETSOCKOPT removed */
-	cap_rights_init(&rights, CAP_SEND);
-	if (caph_rights_limit(ssend, &rights) < 0) {
-		fprintf(stderr, "cap_rights_limit ssend setsockopt\n");
-		exit(1);
-	}
+	// cap_rights_init(&rights, CAP_SEND);
+	// if (caph_rights_limit(ssend, &rights) < 0) {
+	// 	fprintf(stderr, "cap_rights_limit ssend setsockopt\n");
+	// 	exit(1);
+	// }
 
 	if (to->sin_family == AF_INET) {
 		(void)printf("PING %s (%s)", hostname,
@@ -963,7 +963,7 @@ ping(int argc, char *const *argv)
 		si_sa.sa_handler = stopit;
 		if (sigaction(SIGALRM, &si_sa, 0) == -1) {
 			fprintf(stderr, "sigaction SIGALRM\n");
-			exit(71)
+			exit(71);
 		}
         }
 
@@ -1028,7 +1028,7 @@ ping(int argc, char *const *argv)
 			if ((cc = recvmsg(srecv, &msg, 0)) < 0) {
 				if (errno == EINTR)
 					continue;
-				warn("recvmsg");
+				fprintf(stderr, "recvmsg warning\n");
 				continue;
 			}
 #ifdef SO_TIMESTAMP
@@ -1680,7 +1680,8 @@ pr_addr(struct in_addr ina)
 	if (options & F_NUMERIC)
 		return inet_ntoa(ina);
 
-	hp = cap_gethostbyaddr(capdns, (char *)&ina, 4, AF_INET);
+	//hp = cap_gethostbyaddr(capdns, (char *)&ina, 4, AF_INET);
+	hp = gethostbyaddr((char *)&ina, 4, AF_INET);
 
 	if (hp == NULL)
 		return inet_ntoa(ina);
@@ -1754,39 +1755,39 @@ fill(char *bp, char *patp)
 	}
 }
 
-static cap_channel_t *
-capdns_setup(void)
-{
-	cap_channel_t *capcas, *capdnsloc;
-#ifdef WITH_CASPER
-	const char *types[2];
-	int families[1];
-#endif
-	capcas = cap_init();
-	if (capcas == NULL) {
-		fprintf(stderr, "uunable to create casper process\n");
-		exit(1);
-	}
-
-	capdnsloc = cap_service_open(capcas, "system.dns");
-	/* Casper capability no longer needed. */
-	cap_close(capcas);
-	if (capdnsloc == NULL) {
-		fprintf(stderr, "unable to open system.dns service\n");
-		exit(1);
-	}
-#ifdef WITH_CASPER
-	types[0] = "NAME2ADDR";
-	types[1] = "ADDR2NAME";
-	if (cap_dns_type_limit(capdnsloc, types, 2) < 0) {
-		fprintf(stderr, "unable to limit access to system.dns service");
-		exit(1);
-	}
-	families[0] = AF_INET;
-	if (cap_dns_family_limit(capdnsloc, families, 1) < 0) {
-		fprintf(stderr, "unable to limit access to system.dns service");
-		exit(1);
-	}
-#endif
-	return (capdnsloc);
-}
+// static cap_channel_t *
+// capdns_setup(void)
+// {
+// 	cap_channel_t *capcas, *capdnsloc;
+// #ifdef WITH_CASPER
+// 	const char *types[2];
+// 	int families[1];
+// #endif
+// 	capcas = cap_init();
+// 	if (capcas == NULL) {
+// 		fprintf(stderr, "uunable to create casper process\n");
+// 		exit(1);
+// 	}
+//
+// 	capdnsloc = cap_service_open(capcas, "system.dns");
+// 	/* Casper capability no longer needed. */
+// 	cap_close(capcas);
+// 	if (capdnsloc == NULL) {
+// 		fprintf(stderr, "unable to open system.dns service\n");
+// 		exit(1);
+// 	}
+// #ifdef WITH_CASPER
+// 	types[0] = "NAME2ADDR";
+// 	types[1] = "ADDR2NAME";
+// 	if (cap_dns_type_limit(capdnsloc, types, 2) < 0) {
+// 		fprintf(stderr, "unable to limit access to system.dns service");
+// 		exit(1);
+// 	}
+// 	families[0] = AF_INET;
+// 	if (cap_dns_family_limit(capdnsloc, families, 1) < 0) {
+// 		fprintf(stderr, "unable to limit access to system.dns service");
+// 		exit(1);
+// 	}
+// #endif
+// 	return (capdnsloc);
+// }

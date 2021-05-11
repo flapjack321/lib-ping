@@ -81,6 +81,6 @@ LIBPINGSRCS-$(CONFIG_LIBPING_MAIN_FUNCTION) += $(LIBPING_BASE)/main.c|unikraft
 # LIBPING_SRCS-y += # Include source files here
 LIBPING_SRCS-y += $(LIBPING_BASE)/strtonum.c
 LIBPING_SRCS-y += $(LIBPING_BASE)/utils.c
+LIBPING_SRCS-y += $(LIBPING_BASE)/usage.c
 LIBPING_SRCS-y += $(LIBPING_BASE)/ping.c
 # LIBPING_SRCS-y += $(LIBPING_BASE)/main.c
-
