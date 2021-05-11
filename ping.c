@@ -43,8 +43,8 @@ static const char copyright[] =
 static char sccsid[] = "@(#)ping.c	8.1 (Berkeley) 6/5/93";
 #endif /* not lint */
 #endif
-#include <sys/cdefs.h>
-__FBSDID("$FreeBSD$");
+// #include <sys/cdefs.h>
+// __FBSDID("$FreeBSD$");
 
 /*
  *			P I N G . C
@@ -65,29 +65,29 @@ __FBSDID("$FreeBSD$");
  */
 
 #include <sys/param.h>		/* NB: we rely on this for <sys/types.h> */
-#include <sys/capsicum.h>
+// #include <sys/capsicum.h>
 #include <sys/socket.h>
-#include <sys/sysctl.h>
+// #include <sys/sysctl.h>
 #include <sys/time.h>
 #include <sys/uio.h>
 
 #include <netinet/in.h>
 #include <netinet/in_systm.h>
-#include <netinet/ip.h>
-#include <netinet/ip_icmp.h>
-#include <netinet/ip_var.h>
+#include <lwip/ip.h>
+#include <lwip/prot/icmp.h>
+// #include <netinet/ip_var.h>
 #include <arpa/inet.h>
 
-#include <libcasper.h>
-#include <casper/cap_dns.h>
+// #include <libcasper.h>
+// #include <casper/cap_dns.h>
 
-#ifdef IPSEC
-#include <netipsec/ipsec.h>
-#endif /*IPSEC*/
+// #ifdef IPSEC
+// #include <netipsec/ipsec.h>
+// #endif /*IPSEC*/
 
-#include <capsicum_helpers.h>
+// #include <capsicum_helpers.h>
 #include <ctype.h>
-#include <err.h>
+// #include <err.h>
 #include <errno.h>
 #include <math.h>
 #include <netdb.h>
@@ -100,9 +100,11 @@ __FBSDID("$FreeBSD$");
 #include <time.h>
 #include <unistd.h>
 
-#include "main.h"
+// #include "main.h"
 #include "ping.h"
 #include "utils.h"
+#include "strtonum.h"
+#include "config.h"
 
 #define	INADDR_LEN	((int)sizeof(in_addr_t))
 #define	TIMEVAL_LEN	((int)sizeof(struct tv32))
@@ -182,7 +184,7 @@ static char *shostname;
 static int ident;		/* process id to identify our packets */
 static int uid;			/* cached uid for micro-optimization */
 static u_char icmp_type = ICMP_ECHO;
-static u_char icmp_type_rsp = ICMP_ECHOREPLY;
+static u_char icmp_type_rsp = ICMP_ER;
 static int phdr_len = 0;
 static int send_len;
 
@@ -284,18 +286,22 @@ ping(int argc, char *const *argv)
 	srecv = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
 	srecv_errno = errno;
 
-	if (setuid(getuid()) != 0)
-		err(EX_NOPERM, "setuid() failed");
+	if (setuid(getuid()) != 0) {
+		fprintf(stderr, "setuid() failed: %d\n", 1);
+		exit(77);
+	}
 	uid = getuid();
 
 	if (ssend < 0) {
 		errno = ssend_errno;
-		err(EX_OSERR, "ssend socket");
+		fprintf(stderr, "ssend socket: %d\n", errno);
+		exit(71);
 	}
 
 	if (srecv < 0) {
 		errno = srecv_errno;
-		err(EX_OSERR, "srecv socket");
+		fprintf(stderr, "srecv socket\n");
+		exit(71);
 	}
 
 	alarmtimeout = df = preload = tos = pcp = 0;
@@ -323,8 +329,10 @@ ping(int argc, char *const *argv)
 		case 'C':
 			options |= F_IP_VLAN_PCP;
 			ltmp = strtonum(optarg, -1, 7, &errstr);
-			if (errstr != NULL)
-				errx(EX_USAGE, "invalid PCP: `%s'", optarg);
+			if (errstr != NULL) {
+				fprintf(stderr, "invalid PCP: '%s'\n", optarg);
+				exit(64);
+			}
 			pcp = ltmp;
 			break;
 		case 'c':
@@ -345,7 +353,8 @@ ping(int argc, char *const *argv)
 		case 'f':
 			if (uid) {
 				errno = EPERM;
-				err(EX_NOPERM, "-f flag");
+				fprintf(stderr, "-f flag\n");
+				exit(77);
 			}
 			options |= F_FLOOD;
 			setbuf(stdout, (char *)NULL);
@@ -353,28 +362,26 @@ ping(int argc, char *const *argv)
 		case 'G': /* Maximum packet size for ping sweep */
 			ltmp = strtonum(optarg, 1, INT_MAX, &errstr);
 			if (errstr != NULL) {
-				errx(EX_USAGE, "invalid packet size: `%s'",
-				    optarg);
+				fprintf(stderr, "invalid packet size: '%s'\n", optarg);
+				exit(64);
 			}
 			sweepmax = (int)ltmp;
 			if (uid != 0 && sweepmax > DEFDATALEN) {
-				errc(EX_NOPERM, EPERM,
-				    "packet size too large: %d > %u",
-				    sweepmax, DEFDATALEN);
+				fprintf(stderr, "packet size too large: %d > %u\n", sweepmax, DEFDATALEN);
+				exit(77);
 			}
 			options |= F_SWEEP;
 			break;
 		case 'g': /* Minimum packet size for ping sweep */
 			ltmp = strtonum(optarg, 1, INT_MAX, &errstr);
 			if (errstr != NULL) {
-				errx(EX_USAGE, "invalid packet size: `%s'",
-				    optarg);
+				fprintf(stderr, "invalid packet size: '%s'\n", optarg);
+				exit(64);
 			}
 			sweepmin = (int)ltmp;
 			if (uid != 0 && sweepmin > DEFDATALEN) {
-				errc(EX_NOPERM, EPERM,
-				    "packet size too large: %d > %u",
-				    sweepmin, DEFDATALEN);
+				fprintf(stderr, "packet size too large: %d > %u\n", sweepmin, DEFDATALEN);
+				exit(64);
 			}
 			options |= F_SWEEP;
 			break;
@@ -384,34 +391,35 @@ ping(int argc, char *const *argv)
 		case 'h': /* Packet size increment for ping sweep */
 			ltmp = strtonum(optarg, 1, INT_MAX, &errstr);
 			if (errstr != NULL) {
-				errx(EX_USAGE, "invalid packet size: `%s'",
-				    optarg);
+				fprintf(stderr, "invalid packet size: '%s'\n", optarg);
+				exit(64);
 			}
 			sweepincr = (int)ltmp;
 			if (uid != 0 && sweepincr > DEFDATALEN) {
-				errc(EX_NOPERM, EPERM,
-				    "packet size too large: %d > %u",
-				    sweepincr, DEFDATALEN);
+				fprintf(stderr, "packet size too large: %d > %u\n", sweepincr, DEFDATALEN);
+				exit(77);
 			}
 			options |= F_SWEEP;
 			break;
 		case 'I':		/* multicast interface */
-			if (inet_aton(optarg, &ifaddr) == 0)
-				errx(EX_USAGE,
-				    "invalid multicast interface: `%s'",
-				    optarg);
+			if (inet_aton(optarg, &ifaddr) == 0) {
+				fprintf(stderr, "invalid multicast interface: '%s'\n", optarg);
+				exit(64);
+			}
 			options |= F_MIF;
 			break;
 		case 'i':		/* wait between sending packets */
 			t = strtod(optarg, &ep) * 1000.0;
-			if (*ep || ep == optarg || t > (double)INT_MAX)
-				errx(EX_USAGE, "invalid timing interval: `%s'",
-				    optarg);
+			if (*ep || ep == optarg || t > (double)INT_MAX) {
+				fprintf(stderr, "invalid timing interval: '%s'\n", optarg);
+				exit(64);
+			}
 			options |= F_INTERVAL;
 			interval = (int)t;
 			if (uid && interval < 1000) {
 				errno = EPERM;
-				err(EX_NOPERM, "-i interval too short");
+				fprintf(stderr, "-i interval too short\n");
+				exit(64);
 			}
 			break;
 		case 'L':
@@ -420,12 +428,14 @@ ping(int argc, char *const *argv)
 			break;
 		case 'l':
 			ltmp = strtonum(optarg, 0, INT_MAX, &errstr);
-			if (errstr != NULL)
-				errx(EX_USAGE,
-				    "invalid preload value: `%s'", optarg);
+			if (errstr != NULL) {
+				fprintf(stderr, "invalid preload value: '%s'\n", optarg);
+				exit(64);
+			}
 			if (uid) {
 				errno = EPERM;
-				err(EX_NOPERM, "-l flag");
+				fprintf(stderr, "-l flag\n");
+				exit(77);
 			}
 			preload = (int)ltmp;
 			break;
@@ -440,14 +450,17 @@ ping(int argc, char *const *argv)
 				options |= F_TIME;
 				break;
 			default:
-				errx(EX_USAGE, "invalid message: `%c'", optarg[0]);
+				fprintf(stderr, "invalid mesage: '%c'\n", optarg[0]);
+				exit(64);
 				break;
 			}
 			break;
 		case 'm':		/* TTL */
 			ltmp = strtonum(optarg, 0, MAXTTL, &errstr);
-			if (errstr != NULL)
-				errx(EX_USAGE, "invalid TTL: `%s'", optarg);
+			if (errstr != NULL) {
+				fprintf(stderr, "invalid TTL: '%s'\n", optarg);
+				exit(64);
+			}
 			ttl = (int)ltmp;
 			options |= F_TTL;
 			break;
@@ -491,41 +504,46 @@ ping(int argc, char *const *argv)
 			break;
 		case 's':		/* size of packet to send */
 			ltmp = strtonum(optarg, 0, INT_MAX, &errstr);
-			if (errstr != NULL)
-				errx(EX_USAGE, "invalid packet size: `%s'",
-				    optarg);
+			if (errstr != NULL) {
+				fprintf(stderr, "invalid packet size: '%s'\n", optarg);
+				exit(64);
+			}
 			datalen = (int)ltmp;
 			if (uid != 0 && datalen > DEFDATALEN) {
 				errno = EPERM;
-				err(EX_NOPERM,
-				    "packet size too large: %d > %u",
-				    datalen, DEFDATALEN);
+				fprintf(stderr, "packet size too large: %d > %u\n", datalen, DEFDATALEN);
+				exit(77);
 			}
 			break;
 		case 'T':		/* multicast TTL */
 			ltmp = strtonum(optarg, 0, MAXTTL, &errstr);
-			if (errstr != NULL)
-				errx(EX_USAGE, "invalid multicast TTL: `%s'",
-				    optarg);
+			if (errstr != NULL) {
+				fprintf(stderr, "invalid multicast TTL: '%s'\n", optarg);
+				exit(64);
+			}
 			mttl = (unsigned char)ltmp;
 			options |= F_MTTL;
 			break;
 		case 't':
 			alarmtimeout = strtoul(optarg, &ep, 0);
-			if ((alarmtimeout < 1) || (alarmtimeout == ULONG_MAX))
-				errx(EX_USAGE, "invalid timeout: `%s'",
-				    optarg);
-			if (alarmtimeout > MAXALARM)
-				errx(EX_USAGE, "invalid timeout: `%s' > %d",
-				    optarg, MAXALARM);
+			if ((alarmtimeout < 1) || (alarmtimeout == ULONG_MAX)) {
+				fprintf(stderr, "invalid timeout: '%s'\n", optarg);
+				exit(64);
+			}
+			if (alarmtimeout > MAXALARM) {
+				fprintf(stderr, "invalid timeout: '%s' > %d\n", optarg, MAXALARM);
+				exit(64);
+			}
 			{
 				struct itimerval itv;
 
 				timerclear(&itv.it_interval);
 				timerclear(&itv.it_value);
 				itv.it_value.tv_sec = (time_t)alarmtimeout;
-				if (setitimer(ITIMER_REAL, &itv, NULL) != 0)
-					err(1, "setitimer");
+				if (setitimer(ITIMER_REAL, &itv, NULL) != 0) {
+					fprintf(stderr, "settimer\n");
+					exit(1);
+				}
 			}
 			break;
 		case 'v':
@@ -533,17 +551,20 @@ ping(int argc, char *const *argv)
 			break;
 		case 'W':		/* wait ms for answer */
 			t = strtod(optarg, &ep);
-			if (*ep || ep == optarg || t > (double)INT_MAX)
-				errx(EX_USAGE, "invalid timing interval: `%s'",
-				    optarg);
+			if (*ep || ep == optarg || t > (double)INT_MAX) {
+				fprintf(stderr, "invalid timing interval: '%s'\n", optarg);
+				exit(64);
+			}
 			options |= F_WAITTIME;
 			waittime = (int)t;
 			break;
 		case 'z':
 			options |= F_HDRINCL;
 			ltmp = strtol(optarg, &ep, 0);
-			if (*ep || ep == optarg || ltmp > MAXTOS || ltmp < 0)
-				errx(EX_USAGE, "invalid TOS: `%s'", optarg);
+			if (*ep || ep == optarg || ltmp > MAXTOS || ltmp < 0) {
+				fprintf(stderr, "invalid TOS: '%s'\n", optarg);
+				exit(64);
+			}
 			tos = ltmp;
 			break;
 		default:
@@ -558,30 +579,31 @@ ping(int argc, char *const *argv)
 	switch (options & (F_MASK|F_TIME)) {
 	case 0: break;
 	case F_MASK:
-		icmp_type = ICMP_MASKREQ;
-		icmp_type_rsp = ICMP_MASKREPLY;
+		icmp_type = ICMP_AM;
+		icmp_type_rsp = ICMP_AMR;
 		phdr_len = MASK_LEN;
 		if (!(options & F_QUIET))
 			(void)printf("ICMP_MASKREQ\n");
 		break;
 	case F_TIME:
-		icmp_type = ICMP_TSTAMP;
-		icmp_type_rsp = ICMP_TSTAMPREPLY;
+		icmp_type = ICMP_TS;
+		icmp_type_rsp = ICMP_TSR;
 		phdr_len = TS_LEN;
 		if (!(options & F_QUIET))
 			(void)printf("ICMP_TSTAMP\n");
 		break;
 	default:
-		errx(EX_USAGE, "ICMP_TSTAMP and ICMP_MASKREQ are exclusive.");
+		fprintf(stderr, "ICMP_TS and ICMP_AMR are exclusive\n");
 		break;
 	}
 	icmp_len = sizeof(struct ip) + ICMP_MINLEN + phdr_len;
 	if (options & F_RROUTE)
 		icmp_len += MAX_IPOPTLEN;
 	maxpayload = IP_MAXPACKET - icmp_len;
-	if (datalen > maxpayload)
-		errx(EX_USAGE, "packet size too large: %d > %d", datalen,
-		    maxpayload);
+	if (datalen > maxpayload) {
+		fprintf(stderr, "packet size too large: %d > %d\n", datalen, maxpayload);
+		exit(64);
+	}
 	send_len = icmp_len + datalen;
 	datap = &outpack[ICMP_MINLEN + phdr_len + TIMEVAL_LEN];
 	if (options & F_PINGFILLED) {
@@ -595,9 +617,10 @@ ping(int argc, char *const *argv)
 			shostname = source;
 		} else {
 			hp = cap_gethostbyname2(capdns, source, AF_INET);
-			if (!hp)
-				errx(EX_NOHOST, "cannot resolve %s: %s",
-				    source, hstrerror(h_errno));
+			if (!hp) {
+				fprintf(stderr, "cannot resolve %s: %s\n", source, hstrerror(h_errno));
+				exit(68);
+			}
 
 			sock_in.sin_len = sizeof sock_in;
 			if ((unsigned)hp->h_length > sizeof(sock_in.sin_addr) ||
@@ -610,9 +633,10 @@ ping(int argc, char *const *argv)
 			snamebuf[sizeof(snamebuf) - 1] = '\0';
 			shostname = snamebuf;
 		}
-		if (bind(ssend, (struct sockaddr *)&sock_in, sizeof sock_in) ==
-		    -1)
-			err(1, "bind");
+		if (bind(ssend, (struct sockaddr *)&sock_in, sizeof sock_in) == -1) {
+			fprintf(stderr, "bind\n");
+			exit(1);
+		}
 	}
 
 	bzero(&whereto, sizeof(whereto));
@@ -623,12 +647,15 @@ ping(int argc, char *const *argv)
 		hostname = target;
 	} else {
 		hp = cap_gethostbyname2(capdns, target, AF_INET);
-		if (!hp)
-			errx(EX_NOHOST, "cannot resolve %s: %s",
-			    target, hstrerror(h_errno));
+		if (!hp) {
+			fprintf(stderr, "cannot resolve %s: %s", target, hstrerror(h_errno));
+			exit(68);
+		}
 
-		if ((unsigned)hp->h_length > sizeof(to->sin_addr))
-			errx(1, "gethostbyname2 returned an illegal address");
+		if ((unsigned)hp->h_length > sizeof(to->sin_addr)) {
+			fprintf(stderr, "gethostbyname2 returned an illegal address\n");
+			exit(1);
+		}
 		memcpy(&to->sin_addr, hp->h_addr_list[0], sizeof to->sin_addr);
 		(void)strncpy(hnamebuf, hp->h_name, sizeof(hnamebuf) - 1);
 		hnamebuf[sizeof(hnamebuf) - 1] = '\0';
@@ -641,23 +668,30 @@ ping(int argc, char *const *argv)
 		const char *types[1];
 
 		types[0] = "ADDR2NAME";
-		if (cap_dns_type_limit(capdns, types, 1) < 0)
-			err(1, "unable to limit access to system.dns service");
+		if (cap_dns_type_limit(capdns, types, 1) < 0) {
+			fprintf(stderr, "unable to limit access to sytem.dns service\n");
+			exit(1);
+		}
 	}
 #endif
-	if (connect(ssend, (struct sockaddr *)&whereto, sizeof(whereto)) != 0)
-		err(1, "connect");
+	if (connect(ssend, (struct sockaddr *)&whereto, sizeof(whereto)) != 0) {
+		fprintf(stderr, "connect\n");
+		exit(1);
+	}
 
-	if (options & F_FLOOD && options & F_INTERVAL)
-		errx(EX_USAGE, "-f and -i: incompatible options");
+	if (options & F_FLOOD && options & F_INTERVAL) {
+		fprintf(stderr, "-f and -i: incompatible options\n");
+		exit(64);
+	}
 
-	if (options & F_FLOOD && IN_MULTICAST(ntohl(to->sin_addr.s_addr)))
-		errx(EX_USAGE,
-		    "-f flag cannot be used with multicast destination");
+	if (options & F_FLOOD && IN_MULTICAST(ntohl(to->sin_addr.s_addr))) {
+		fprintf(stderr, "-f flag cannot be used with multicast destination\n");
+		exit(64);
+	}
 	if (options & (F_MIF | F_NOLOOP | F_MTTL)
-	    && !IN_MULTICAST(ntohl(to->sin_addr.s_addr)))
-		errx(EX_USAGE,
-		    "-I, -L, -T flags cannot be used with unicast destination");
+	    && !IN_MULTICAST(ntohl(to->sin_addr.s_addr))) {
+				fprintf(stderr, "-I, -L, -T glags cannot be used with unicast destination\n");
+			}
 
 	if (datalen >= TIMEVAL_LEN)	/* can we time transfer */
 		timing = 1;
@@ -691,9 +725,10 @@ ping(int argc, char *const *argv)
 			if (buf == NULL)
 				errx(EX_CONFIG, "%s", ipsec_strerror());
 			if (setsockopt(srecv, IPPROTO_IP, IP_IPSEC_POLICY,
-					buf, ipsec_get_policylen(buf)) < 0)
-				err(EX_CONFIG,
-				    "ipsec policy cannot be configured");
+					buf, ipsec_get_policylen(buf)) < 0) {
+						fprintf(stderr, "ipsec policy cannot be configured\n");
+						exit(78);
+					}
 			free(buf);
 		}
 
@@ -702,9 +737,10 @@ ping(int argc, char *const *argv)
 			if (buf == NULL)
 				errx(EX_CONFIG, "%s", ipsec_strerror());
 			if (setsockopt(ssend, IPPROTO_IP, IP_IPSEC_POLICY,
-					buf, ipsec_get_policylen(buf)) < 0)
-				err(EX_CONFIG,
-				    "ipsec policy cannot be configured");
+					buf, ipsec_get_policylen(buf)) < 0) {
+						fprintf(stderr, "ipsec policy cannot be configured\n");
+						exit(78);
+					}
 			free(buf);
 		}
 	}
@@ -721,8 +757,10 @@ ping(int argc, char *const *argv)
 			mib[2] = IPPROTO_IP;
 			mib[3] = IPCTL_DEFTTL;
 			sz = sizeof(ttl);
-			if (sysctl(mib, 4, &ttl, &sz, NULL, 0) == -1)
-				err(1, "sysctl(net.inet.ip.ttl)");
+			if (sysctl(mib, 4, &ttl, &sz, NULL, 0) == -1) {
+				fprintf(stderr, "sysctl(net.inet.ip.ttl)\n");
+				exit(1);
+			}
 		}
 		setsockopt(ssend, IPPROTO_IP, IP_HDRINCL, &hold, sizeof(hold));
 		ip.ip_v = IPVERSION;
@@ -743,15 +781,21 @@ ping(int argc, char *const *argv)
 	 * We must connect(2) our socket before this point.
 	 */
 	caph_cache_catpages();
-	if (caph_enter_casper() < 0)
-		err(1, "caph_enter_casper");
+	if (caph_enter_casper() < 0) {
+		fprintf(stderr, "caph_enter_casper\n");
+		exit(1);
+	}
 
 	cap_rights_init(&rights, CAP_RECV, CAP_EVENT, CAP_SETSOCKOPT);
-	if (caph_rights_limit(srecv, &rights) < 0)
-		err(1, "cap_rights_limit srecv");
+	if (caph_rights_limit(srecv, &rights) < 0) {
+		fprintf(stderr, "cap_rights_liit srecv\n");
+		exit(1);
+	}
 	cap_rights_init(&rights, CAP_SEND, CAP_SETSOCKOPT);
-	if (caph_rights_limit(ssend, &rights) < 0)
-		err(1, "cap_rights_limit ssend");
+	if (caph_rights_limit(ssend, &rights) < 0) {
+		fprintf(stderr, "cap_rights_limit ssend\n");
+		exit(1);
+	}
 
 	/* record route option */
 	if (options & F_RROUTE) {
@@ -762,36 +806,42 @@ ping(int argc, char *const *argv)
 		rspace[IPOPT_OFFSET] = IPOPT_MINOFF;
 		rspace[sizeof(rspace) - 1] = IPOPT_EOL;
 		if (setsockopt(ssend, IPPROTO_IP, IP_OPTIONS, rspace,
-		    sizeof(rspace)) < 0)
-			err(EX_OSERR, "setsockopt IP_OPTIONS");
+		    sizeof(rspace)) < 0) {
+					fprintf(stderr, "setsockopt IP_OPTIONS\n");
+					exit(71);
+				}
 #else
-		errx(EX_UNAVAILABLE,
-		    "record route not available in this implementation");
+		fprintf(stderr, "record route not avaiable in this implementation\n");
+		exit(69);
 #endif /* IP_OPTIONS */
 	}
 
 	if (options & F_TTL) {
 		if (setsockopt(ssend, IPPROTO_IP, IP_TTL, &ttl,
 		    sizeof(ttl)) < 0) {
-			err(EX_OSERR, "setsockopt IP_TTL");
+					fprintf(stderr, "setsockopt IP_TTL\n");
+					exit(71);
 		}
 	}
 	if (options & F_NOLOOP) {
 		if (setsockopt(ssend, IPPROTO_IP, IP_MULTICAST_LOOP, &loop,
 		    sizeof(loop)) < 0) {
-			err(EX_OSERR, "setsockopt IP_MULTICAST_LOOP");
+					fprintf(stderr, "setsockopt IP_MULTICAST_LOOP\n");
+					exit(71);
 		}
 	}
 	if (options & F_MTTL) {
 		if (setsockopt(ssend, IPPROTO_IP, IP_MULTICAST_TTL, &mttl,
 		    sizeof(mttl)) < 0) {
-			err(EX_OSERR, "setsockopt IP_MULTICAST_TTL");
+					fprintf(stderr, "setsockopt IP_MULTICAST_TTL\n");
+					exit(71);
 		}
 	}
 	if (options & F_MIF) {
 		if (setsockopt(ssend, IPPROTO_IP, IP_MULTICAST_IF, &ifaddr,
 		    sizeof(ifaddr)) < 0) {
-			err(EX_OSERR, "setsockopt IP_MULTICAST_IF");
+					fprintf(stderr, "setsockopt IP_MULTICAST_IF\n");
+					exit(71);
 		}
 	}
 #ifdef SO_TIMESTAMP
@@ -799,24 +849,32 @@ ping(int argc, char *const *argv)
 		int on = 1;
 		int ts_clock = SO_TS_MONOTONIC;
 		if (setsockopt(srecv, SOL_SOCKET, SO_TIMESTAMP, &on,
-		    sizeof(on)) < 0)
-			err(EX_OSERR, "setsockopt SO_TIMESTAMP");
+		    sizeof(on)) < 0) {
+					fprintf(stderr, "setsockopt SO_TIMESTAMP\n");
+					exit(71);
+				}
 		if (setsockopt(srecv, SOL_SOCKET, SO_TS_CLOCK, &ts_clock,
-		    sizeof(ts_clock)) < 0)
-			err(EX_OSERR, "setsockopt SO_TS_CLOCK");
+		    sizeof(ts_clock)) < 0) {
+					fprintf(stderr, "setsockopt SO_TS_CLOCK\n");
+					exit(71);
+				}
 	}
 #endif
 	if (sweepmax) {
-		if (sweepmin > sweepmax)
-			errx(EX_USAGE,
-	    "Maximum packet size must be no less than the minimum packet size");
+		if (sweepmin > sweepmax) {
+				fprintf(stderr, "Maximum packet size must be no less than the minimum packet size\n");
+				exit(64);
+		}
 
-		if (sweepmax > maxpayload - TIMEVAL_LEN)
-			errx(EX_USAGE, "Invalid sweep maximum");
+		if (sweepmax > maxpayload - TIMEVAL_LEN) {
+			fprintf(stderr, "Invalid sweep maximum\n");
+			exit(64);
+		}
 
-		if (datalen != DEFDATALEN)
-			errx(EX_USAGE,
-		    "Packet size and ping sweep are mutually exclusive");
+		if (datalen != DEFDATALEN) {
+			fprintf(stderr, "Packet size and ping sweep are mutually exclusive\n");
+			exit(64);
+		}
 
 		if (npackets > 0) {
 			snpackets = npackets;
@@ -826,8 +884,10 @@ ping(int argc, char *const *argv)
 		datalen = sweepmin;
 		send_len = icmp_len + sweepmin;
 	}
-	if (options & F_SWEEP && !sweepmax)
-		errx(EX_USAGE, "Maximum sweep size must be specified");
+	if (options & F_SWEEP && !sweepmax) {
+		fprintf(stderr, "Maximum sweep size must be specified\n");
+		exit(64);
+	}
 
 	/*
 	 * When pinging the broadcast address, you can get a lot of answers.
@@ -846,15 +906,19 @@ ping(int argc, char *const *argv)
 	    sizeof(hold));
 	/* CAP_SETSOCKOPT removed */
 	cap_rights_init(&rights, CAP_RECV, CAP_EVENT);
-	if (caph_rights_limit(srecv, &rights) < 0)
-		err(1, "cap_rights_limit srecv setsockopt");
+	if (caph_rights_limit(srecv, &rights) < 0) {
+		fprintf(stderr, "cap_rights_limit srecv setsockopt\n");
+		exit(1);
+	}
 	if (uid == 0)
 		(void)setsockopt(ssend, SOL_SOCKET, SO_SNDBUF, (char *)&hold,
 		    sizeof(hold));
 	/* CAP_SETSOCKOPT removed */
 	cap_rights_init(&rights, CAP_SEND);
-	if (caph_rights_limit(ssend, &rights) < 0)
-		err(1, "cap_rights_limit ssend setsockopt");
+	if (caph_rights_limit(ssend, &rights) < 0) {
+		fprintf(stderr, "cap_rights_limit ssend setsockopt\n");
+		exit(1);
+	}
 
 	if (to->sin_family == AF_INET) {
 		(void)printf("PING %s (%s)", hostname,
@@ -885,18 +949,22 @@ ping(int argc, char *const *argv)
 
 	si_sa.sa_handler = stopit;
 	if (sigaction(SIGINT, &si_sa, 0) == -1) {
-		err(EX_OSERR, "sigaction SIGINT");
+		fprintf(stderr, "sigaction SIGINT\n");
+		exit(71);
 	}
 
 	si_sa.sa_handler = status;
 	if (sigaction(SIGINFO, &si_sa, 0) == -1) {
-		err(EX_OSERR, "sigaction");
+		fprintf(stderr, "sigaction\n");
+		exit(71);
 	}
 
         if (alarmtimeout > 0) {
 		si_sa.sa_handler = stopit;
-		if (sigaction(SIGALRM, &si_sa, 0) == -1)
-			err(EX_OSERR, "sigaction SIGALRM");
+		if (sigaction(SIGALRM, &si_sa, 0) == -1) {
+			fprintf(stderr, "sigaction SIGALRM\n");
+			exit(71)
+		}
         }
 
 	bzero(&msg, sizeof(msg));
@@ -936,7 +1004,10 @@ ping(int argc, char *const *argv)
 		ssize_t cc;
 
 		check_status();
-		if ((unsigned)srecv >= FD_SETSIZE)
+		if ((unsigned)srecv >= FD_SETSIZE) {
+			fprintf(stderr, "descriptor too large\n");
+			exit(71);
+		}
 			errx(EX_OSERR, "descriptor too large");
 		FD_ZERO(&rfds);
 		FD_SET(srecv, &rfds);
@@ -1506,64 +1577,19 @@ pr_icmph(struct icmp *icp, struct ip *oip, const u_char *const oicmp_raw)
 {
 
 	switch(icp->icmp_type) {
-	case ICMP_ECHOREPLY:
+	case ICMP_ER:
 		(void)printf("Echo Reply\n");
 		/* XXX ID + Seq + Data */
 		break;
-	case ICMP_UNREACH:
-		switch(icp->icmp_code) {
-		case ICMP_UNREACH_NET:
-			(void)printf("Destination Net Unreachable\n");
-			break;
-		case ICMP_UNREACH_HOST:
-			(void)printf("Destination Host Unreachable\n");
-			break;
-		case ICMP_UNREACH_PROTOCOL:
-			(void)printf("Destination Protocol Unreachable\n");
-			break;
-		case ICMP_UNREACH_PORT:
-			(void)printf("Destination Port Unreachable\n");
-			break;
-		case ICMP_UNREACH_NEEDFRAG:
-			(void)printf("frag needed and DF set (MTU %d)\n",
-					ntohs(icp->icmp_nextmtu));
-			break;
-		case ICMP_UNREACH_SRCFAIL:
-			(void)printf("Source Route Failed\n");
-			break;
-		case ICMP_UNREACH_FILTER_PROHIB:
-			(void)printf("Communication prohibited by filter\n");
-			break;
-		default:
-			(void)printf("Dest Unreachable, Bad Code: %d\n",
-			    icp->icmp_code);
-			break;
-		}
+	case ICMP_DUR:
 		/* Print returned IP header information */
 		pr_retip(oip, oicmp_raw);
 		break;
-	case ICMP_SOURCEQUENCH:
+	case ICMP_SQ:
 		(void)printf("Source Quench\n");
 		pr_retip(oip, oicmp_raw);
 		break;
-	case ICMP_REDIRECT:
-		switch(icp->icmp_code) {
-		case ICMP_REDIRECT_NET:
-			(void)printf("Redirect Network");
-			break;
-		case ICMP_REDIRECT_HOST:
-			(void)printf("Redirect Host");
-			break;
-		case ICMP_REDIRECT_TOSNET:
-			(void)printf("Redirect Type of Service and Network");
-			break;
-		case ICMP_REDIRECT_TOSHOST:
-			(void)printf("Redirect Type of Service and Host");
-			break;
-		default:
-			(void)printf("Redirect, Bad Code: %d", icp->icmp_code);
-			break;
-		}
+	case ICMP_RD:
 		(void)printf("(New addr: %s)\n", inet_ntoa(icp->icmp_gwaddr));
 		pr_retip(oip, oicmp_raw);
 		break;
@@ -1571,53 +1597,35 @@ pr_icmph(struct icmp *icp, struct ip *oip, const u_char *const oicmp_raw)
 		(void)printf("Echo Request\n");
 		/* XXX ID + Seq + Data */
 		break;
-	case ICMP_TIMXCEED:
-		switch(icp->icmp_code) {
-		case ICMP_TIMXCEED_INTRANS:
-			(void)printf("Time to live exceeded\n");
-			break;
-		case ICMP_TIMXCEED_REASS:
-			(void)printf("Frag reassembly time exceeded\n");
-			break;
-		default:
-			(void)printf("Time exceeded, Bad Code: %d\n",
-			    icp->icmp_code);
-			break;
-		}
+	case ICMP_TE:
 		pr_retip(oip, oicmp_raw);
 		break;
-	case ICMP_PARAMPROB:
+	case ICMP_PP:
 		(void)printf("Parameter problem: pointer = 0x%02x\n",
 		    icp->icmp_hun.ih_pptr);
 		pr_retip(oip, oicmp_raw);
 		break;
-	case ICMP_TSTAMP:
+	case ICMP_TS:
 		(void)printf("Timestamp\n");
 		/* XXX ID + Seq + 3 timestamps */
 		break;
-	case ICMP_TSTAMPREPLY:
+	case ICMP_TSR:
 		(void)printf("Timestamp Reply\n");
 		/* XXX ID + Seq + 3 timestamps */
 		break;
-	case ICMP_IREQ:
+	case ICMP_IRQ:
 		(void)printf("Information Request\n");
 		/* XXX ID + Seq */
 		break;
-	case ICMP_IREQREPLY:
+	case ICMP_IR:
 		(void)printf("Information Reply\n");
 		/* XXX ID + Seq */
 		break;
-	case ICMP_MASKREQ:
+	case ICMP_AM:
 		(void)printf("Address Mask Request\n");
 		break;
-	case ICMP_MASKREPLY:
+	case ICMP_AMR:
 		(void)printf("Address Mask Reply\n");
-		break;
-	case ICMP_ROUTERADVERT:
-		(void)printf("Router Advertisement\n");
-		break;
-	case ICMP_ROUTERSOLICIT:
-		(void)printf("Router Solicitation\n");
 		break;
 	default:
 		(void)printf("Bad ICMP type: %d\n", icp->icmp_type);
@@ -1755,21 +1763,30 @@ capdns_setup(void)
 	int families[1];
 #endif
 	capcas = cap_init();
-	if (capcas == NULL)
-		err(1, "unable to create casper process");
+	if (capcas == NULL) {
+		fprintf(stderr, "uunable to create casper process\n");
+		exit(1);
+	}
+
 	capdnsloc = cap_service_open(capcas, "system.dns");
 	/* Casper capability no longer needed. */
 	cap_close(capcas);
-	if (capdnsloc == NULL)
-		err(1, "unable to open system.dns service");
+	if (capdnsloc == NULL) {
+		fprintf(stderr, "unable to open system.dns service\n");
+		exit(1);
+	}
 #ifdef WITH_CASPER
 	types[0] = "NAME2ADDR";
 	types[1] = "ADDR2NAME";
-	if (cap_dns_type_limit(capdnsloc, types, 2) < 0)
-		err(1, "unable to limit access to system.dns service");
+	if (cap_dns_type_limit(capdnsloc, types, 2) < 0) {
+		fprintf(stderr, "unable to limit access to system.dns service");
+		exit(1);
+	}
 	families[0] = AF_INET;
-	if (cap_dns_family_limit(capdnsloc, families, 1) < 0)
-		err(1, "unable to limit access to system.dns service");
+	if (cap_dns_family_limit(capdnsloc, families, 1) < 0) {
+		fprintf(stderr, "unable to limit access to system.dns service");
+		exit(1);
+	}
 #endif
 	return (capdnsloc);
 }
