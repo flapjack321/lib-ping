@@ -62,7 +62,7 @@ CINCLUDES-y += -I$(LIBPING_BASE)/include
 LIBPING_FLAGS =
 
 # Suppress some warnings to make the build process look neater
-LIBPING_FLAGS_SUPPRESS = -Wunused-function
+LIBPING_FLAGS_SUPPRESS = -Wunused-function -Wunused-variable
 
 LIBPING_CFLAGS-y += $(LIBPING_FLAGS)
 LIBPING_CFLAGS-y += $(LIBPING_FLAGS_SUPPRESS)
@@ -83,4 +83,4 @@ LIBPING_SRCS-y += $(LIBPING_BASE)/strtonum.c
 LIBPING_SRCS-y += $(LIBPING_BASE)/utils.c
 LIBPING_SRCS-y += $(LIBPING_BASE)/usage.c
 LIBPING_SRCS-y += $(LIBPING_BASE)/ping.c
-# LIBPING_SRCS-y += $(LIBPING_BASE)/main.c
+LIBPING_SRCS-y += $(LIBPING_BASE)/main.c
